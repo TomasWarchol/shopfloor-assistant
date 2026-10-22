@@ -1,13 +1,9 @@
 using System.Globalization;
 using CommunityToolkit.VectorData.InMemory;
 using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using Microsoft.Extensions.VectorData;
 using OllamaSharp;
-using ShopFloorAssistant.Core.AI;
-using ShopFloorAssistant.Core.Ingestion;
-using ShopFloorAssistant.Core.Storage;
+using ShopFloorAssistant.Core.Retrieval;
+using ShopFloorAssistant.Core.Tests.TestDoubles;
 
 namespace ShopFloorAssistant.Core.Tests.Evaluation;
 
@@ -37,26 +33,17 @@ public class RetrievalEvaluationTests
         var cancellationToken = TestContext.Current.CancellationToken;
         IEmbeddingGenerator<string, Embedding<float>> embeddings = new OllamaApiClient(new Uri("http://localhost:11434"), "bge-m3");
         using var store = new InMemoryVectorStore();
-        var ingestor = new DocumentIngestor(
-            embeddings,
-            store,
-            Options.Create(new IngestionOptions()),
-            Options.Create(new VectorStoreOptions()),
-            Options.Create(new AiOptions()),
-            NullLogger<DocumentIngestor>.Instance);
-
-        var summary = await ingestor.IngestDirectoryAsync(SampleDocuments.DirectoryPath, cancellationToken);
-        var collection = store.GetCollection<Guid, DocumentChunkRecord>(
-            summary.CollectionName, DocumentChunkRecord.CreateDefinition(1024, DistanceFunction.CosineDistance));
+        var summary = await TestIndex.Ingestor(store, embeddings, configuredDimensions: 1024)
+            .IngestDirectoryAsync(SampleDocuments.DirectoryPath, cancellationToken);
+        var search = new DocumentSearch(embeddings, TestIndex.Chunks(store, dimensions: 1024));
 
         var ranks = new List<int?>();
         foreach (var (question, document, fact) in Cases)
         {
-            var vector = await embeddings.GenerateVectorAsync(question, cancellationToken: cancellationToken);
-            var hits = await collection.SearchAsync(vector, top: 10, cancellationToken: cancellationToken).ToListAsync(cancellationToken);
-            var index = hits.FindIndex(hit =>
-                hit.Record.DocumentId.StartsWith(document, StringComparison.Ordinal)
-                && hit.Record.Text.Contains(fact, StringComparison.Ordinal));
+            var hits = await search.SearchAsync(question, top: 10, cancellationToken);
+            var index = hits.ToList().FindIndex(hit =>
+                hit.DocumentId.StartsWith(document, StringComparison.Ordinal)
+                && hit.Text.Contains(fact, StringComparison.Ordinal));
             ranks.Add(index < 0 ? null : index + 1);
         }
 
