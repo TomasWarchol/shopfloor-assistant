@@ -9,8 +9,12 @@ namespace ShopFloorAssistant.Core.Ingestion;
 /// </summary>
 public sealed partial class DocumentChunker(int maxChunkLength = DocumentChunker.DefaultMaxChunkLength)
 {
-    /// <summary>About 300 tokens: small enough to fit several chunks into a model with an 8K input limit.</summary>
-    public const int DefaultMaxChunkLength = 1200;
+    /// <summary>
+    /// About 125 tokens. Measured on the sample documents with bge-m3: 500 characters put the right chunk
+    /// first for 7 of 8 questions (MRR 0.92), 1200 characters only for 4 of 8 (MRR 0.68), because one
+    /// fact gets diluted in a long chunk. See docs/adr/0004-page-aware-chunking.md.
+    /// </summary>
+    public const int DefaultMaxChunkLength = 500;
 
     public IReadOnlyList<DocumentChunk> Chunk(SourceDocument document)
     {
