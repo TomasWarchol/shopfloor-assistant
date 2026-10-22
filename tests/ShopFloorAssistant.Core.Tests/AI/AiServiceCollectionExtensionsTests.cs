@@ -18,7 +18,7 @@ public class AiServiceCollectionExtensionsTests
             .GetService<EmbeddingGeneratorMetadata>();
 
         Assert.NotNull(chat);
-        Assert.Equal("qwen3:4b", chat.DefaultModelId);
+        Assert.Equal("qwen3:4b-instruct", chat.DefaultModelId);
         Assert.Equal(new Uri("http://localhost:11434"), chat.ProviderUri);
         Assert.NotNull(embeddings);
         Assert.Equal("bge-m3", embeddings.DefaultModelId);

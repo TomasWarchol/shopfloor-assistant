@@ -480,3 +480,6 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local vector database (SQLite) created by the ingestion worker
+.data/

@@ -1,5 +1,3 @@
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
 using ShopFloorAssistant.Core.AI;
 using ShopFloorAssistant.Web.Components;
 
@@ -9,9 +7,6 @@ builder.AddServiceDefaults();
 
 // Chat and embedding clients for the provider chosen in the "AI" configuration section.
 builder.Services.AddShopFloorAi(builder.Configuration);
-builder.Services.AddOpenTelemetry()
-    .WithTracing(tracing => tracing.AddSource(AiServiceCollectionExtensions.TelemetrySourceName))
-    .WithMetrics(metrics => metrics.AddMeter(AiServiceCollectionExtensions.TelemetrySourceName));
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
