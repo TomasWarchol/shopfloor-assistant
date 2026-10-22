@@ -1,0 +1,10 @@
+# LF everywhere, so builds and `dotnet format` behave the same on Windows and Linux.
+* text=auto eol=lf
+
+*.cs     diff=csharp
+*.cmd    text eol=crlf
+*.bat    text eol=crlf
+
+*.pdf    binary
+*.png    binary
+*.gif    binary
