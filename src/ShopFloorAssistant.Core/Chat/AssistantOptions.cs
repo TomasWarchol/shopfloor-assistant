@@ -11,6 +11,9 @@ public sealed class AssistantOptions
     /// <summary>Earlier messages sent with a question, so follow-up questions have context.</summary>
     public int HistoryMessages { get; set; } = 6;
 
+    /// <summary>Rewrite follow-up questions into standalone search queries (one extra model call when there is history).</summary>
+    public bool RewriteFollowUps { get; set; } = true;
+
     /// <summary>Low temperature: answers should repeat the documents, not be creative.</summary>
     public float Temperature { get; set; } = 0.1f;
 }

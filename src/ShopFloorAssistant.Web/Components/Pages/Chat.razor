@@ -55,6 +55,10 @@
                     }
                     else
                     {
+                        @if (!string.Equals(turn.SearchQuery, turn.Question, StringComparison.OrdinalIgnoreCase))
+                        {
+                            <p class="searched" title="The follow-up was rewritten with the conversation context before searching">Searched for: @turn.SearchQuery</p>
+                        }
                         <div class="text">@((MarkupString)AnswerFormatter.ToHtml(turn.Answer))</div>
 
                         @if (turn.State == TurnState.Done)
@@ -129,6 +133,7 @@
         try
         {
             var answer = await Assistant.AskAsync(question, _history, _cancellation.Token);
+            turn.SearchQuery = answer.SearchQuery;
             turn.Sources = answer.Sources;
             turn.State = TurnState.Answering;
 
@@ -177,6 +182,8 @@
     private sealed class Turn(string question)
     {
         public string Question { get; } = question;
+
+        public string SearchQuery { get; set; } = question;
 
         public TurnState State { get; set; }
 

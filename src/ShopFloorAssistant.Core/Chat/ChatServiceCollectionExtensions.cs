@@ -13,6 +13,7 @@ public static class ChatServiceCollectionExtensions
         services.AddOptions<AssistantOptions>().Bind(configuration.GetSection(AssistantOptions.SectionName));
         services.AddChunkIndex(configuration);
         services.AddSingleton<DocumentSearch>();
+        services.AddSingleton<QuestionRewriter>();
         services.AddSingleton<ShopFloorChat>();
         return services;
     }
