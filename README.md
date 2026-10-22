@@ -7,7 +7,7 @@
 ![Aspire](https://img.shields.io/badge/Aspire-13-512BD4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> 🚧 **Work in progress.** Milestone 1 (solution skeleton and a provider-agnostic AI layer) is done. Document ingestion is next.
+> 🚧 **Work in progress.** Milestones 1 (skeleton, provider-agnostic AI layer) and 2 (PDF ingestion) are done. The chat with citations is next.
 
 ## Why
 
@@ -15,15 +15,17 @@ On a production line the answer is usually somewhere in a long PDF: a work instr
 
 ShopFloor Assistant answers in seconds **and cites the exact document and page**, so the operator can check the answer instead of trusting it blindly.
 
-All documents in this repository are synthetic. No real company data is used.
+All documents in this repository are synthetic, made for the fictional Contoso Metal Stamping plant. No real company data is used.
 
 ## Features
 
 - [x] Provider-agnostic AI: local **Ollama**, **GitHub Models** or **Microsoft Foundry**, switched in configuration ([ADR 2](docs/adr/0002-provider-agnostic-ai-clients.md))
 - [x] OpenTelemetry for model calls and token usage in the Aspire dashboard
 - [x] Fail-fast configuration validation with actionable messages
-- [ ] PDF ingestion with page-aware chunking
-- [ ] Cross-lingual retrieval: ask in Polish, find the answer in English manuals ([ADR 3](docs/adr/0003-local-multilingual-embeddings.md))
+- [x] PDF ingestion that keeps tables, numbered steps and page numbers intact ([ADR 4](docs/adr/0004-page-aware-chunking.md))
+- [x] Cross-lingual retrieval: ask in Polish, find the answer in English manuals and vice versa ([ADR 3](docs/adr/0003-local-multilingual-embeddings.md))
+- [x] Vector store without Docker (SQLite), or Qdrant when Docker is available ([ADR 5](docs/adr/0005-vector-store.md))
+- [x] Retrieval-quality evaluation with real embeddings: right chunk in the top 3 for every test question (hit@3 100 %, MRR 0.92)
 - [ ] Chat with streaming answers and citations
 - [ ] Guardrails against prompt injection hidden in documents
 - [ ] Answer-quality evaluations (groundedness, relevance) in CI
@@ -32,27 +34,37 @@ All documents in this repository are synthetic. No real company data is used.
 
 ```mermaid
 flowchart LR
-    U([Operator]) --> W[Blazor Web App]
-    W --> C[Core: RAG pipeline]
-    C --> AI{{IChatClient / IEmbeddingGenerator}}
+    PDF[/PDF documents/] --> I[Ingestion worker<br/>read, chunk, embed]
+    I --> V[(Vector store<br/>SQLite or Qdrant)]
+    U([Operator]) --> W[Blazor web app]
+    W -. next milestone .-> V
+    I & W --> AI{{IChatClient / IEmbeddingGenerator}}
     AI --> O[Ollama<br/>local GPU]
     AI --> G[GitHub Models]
     AI --> F[Microsoft Foundry]
-    C -. planned .-> Q[(Qdrant<br/>vector store)]
-    H[Aspire AppHost] -. orchestrates .-> W
+    H[Aspire AppHost] -. runs ingestion, then the web app .-> W
 ```
 
 | Project | Responsibility |
 |---|---|
-| `ShopFloorAssistant.AppHost` | Aspire orchestration: runs the app and its dependencies, hosts the dashboard |
-| `ShopFloorAssistant.Web` | Blazor (interactive server) user interface |
-| `ShopFloorAssistant.Core` | AI client registration, and later the ingestion and retrieval pipeline |
-| `ShopFloorAssistant.ServiceDefaults` | Shared OpenTelemetry, health checks and resilience defaults |
+| `src/ShopFloorAssistant.AppHost` | Aspire orchestration: runs ingestion, then the web app; hosts the dashboard |
+| `src/ShopFloorAssistant.Ingestion` | Worker that indexes the PDFs and exits |
+| `src/ShopFloorAssistant.Web` | Blazor (interactive server) user interface |
+| `src/ShopFloorAssistant.Core` | AI clients, PDF reading, chunking, indexing, vector store registration |
+| `src/ShopFloorAssistant.ServiceDefaults` | Shared OpenTelemetry, health checks and resilience defaults |
+| `tools/ShopFloorAssistant.SampleDocuments` | Generates the sample PDFs from Markdown sources |
 | `tests/ShopFloorAssistant.Core.Tests` | xUnit v3 tests on Microsoft Testing Platform |
+
+### How a PDF becomes searchable
+
+1. **Read**: PdfPig layout analysis. Running headers and footers are dropped, table cells are joined into rows (`E214 | Oil temperature high | ...`), and list numbers stay with their step.
+2. **Chunk**: at most 500 characters, never across a page, a new chunk at every numbered heading. Each chunk knows its section path, for example `9 Alarms and troubleshooting`.
+3. **Embed**: `title + section + text` with bge-m3, in batches.
+4. **Store**: one collection per embedding model. Re-ingesting a document replaces its chunks.
 
 ## Getting started
 
-**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download), [Aspire CLI](https://aspire.dev) (`dotnet tool install -g Aspire.Cli`) and [Ollama](https://ollama.com).
+**Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download), [Aspire CLI](https://aspire.dev) (`dotnet tool install -g Aspire.Cli`) and [Ollama](https://ollama.com). Docker is optional.
 
 ```bash
 ollama pull qwen3:4b-instruct
@@ -60,7 +72,14 @@ ollama pull bge-m3
 aspire run
 ```
 
-Open the dashboard link printed in the console, then open the `web` endpoint.
+Aspire runs the ingestion worker first (about a minute on a laptop GPU), then starts the web app. Open the dashboard link printed in the console to see both, including traces of every embedding call.
+
+### Choosing the vector store
+
+| Store | How to run | Notes |
+|---|---|---|
+| SQLite (default) | `aspire run` | A single file in `.data/`, nothing to install |
+| Qdrant | `aspire run -- VectorStore:Provider=Qdrant` | Needs Docker; runs as a persistent container |
 
 ### Choosing a model provider
 
@@ -76,12 +95,22 @@ The default runs fully locally. To use a stronger hosted model for chat while ke
 dotnet user-secrets set "AI:GitHubModels:ApiKey" "<token>" --project src/ShopFloorAssistant.Web
 ```
 
+## Sample documents
+
+Four synthetic documents in [`samples/documents`](samples/documents): a hydraulic press manual, a die change SOP, a lockout/tagout procedure and a quality work instruction in Polish. They have running headers, footers, tables and numbered procedures, like real plant documents. To regenerate them after editing the Markdown in `samples/source`:
+
+```bash
+dotnet run --project tools/ShopFloorAssistant.SampleDocuments
+```
+
 ## Tests
 
 ```bash
-dotnet test                   # unit tests, no network
-dotnet test --explicit only   # tests that call the local Ollama model
+dotnet test                   # unit and integration tests, no network or containers
+dotnet test --explicit only   # tests with real models: chat smoke test and retrieval evaluation (needs Ollama)
 ```
+
+The retrieval evaluation asks 8 Polish and English questions and checks that the chunk with the answer is retrieved. It fails if hit@3 drops below 85 % or MRR below 0.80.
 
 ## Design decisions
 
