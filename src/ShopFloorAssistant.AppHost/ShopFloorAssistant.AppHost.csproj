@@ -7,6 +7,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.Qdrant" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShopFloorAssistant.Ingestion\ShopFloorAssistant.Ingestion.csproj" />
     <ProjectReference Include="..\ShopFloorAssistant.Web\ShopFloorAssistant.Web.csproj" />
   </ItemGroup>
 

@@ -21,9 +21,10 @@ public sealed class DocumentChunkRecord
 
     /// <summary>
     /// The schema is built at runtime instead of with attributes, because the vector size depends on
-    /// the configured embedding model (1024 for bge-m3, 1536 for text-embedding-3-small).
+    /// the embedding model (1024 for bge-m3, 1536 for text-embedding-3-small) and the distance
+    /// function on the vector store.
     /// </summary>
-    public static VectorStoreCollectionDefinition CreateDefinition(int dimensions) => new()
+    public static VectorStoreCollectionDefinition CreateDefinition(int dimensions, string distanceFunction) => new()
     {
         Properties =
         [
@@ -35,7 +36,7 @@ public sealed class DocumentChunkRecord
             new VectorStoreDataProperty(nameof(Text), typeof(string)) { IsFullTextIndexed = true },
             new VectorStoreVectorProperty(nameof(Embedding), typeof(ReadOnlyMemory<float>), dimensions)
             {
-                DistanceFunction = DistanceFunction.CosineSimilarity,
+                DistanceFunction = distanceFunction,
             },
         ],
     };

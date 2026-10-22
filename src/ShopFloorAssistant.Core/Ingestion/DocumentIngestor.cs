@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.VectorData;
 using ShopFloorAssistant.Core.AI;
+using ShopFloorAssistant.Core.Storage;
 
 namespace ShopFloorAssistant.Core.Ingestion;
 
@@ -11,6 +12,7 @@ public sealed partial class DocumentIngestor(
     IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
     VectorStore vectorStore,
     IOptions<IngestionOptions> options,
+    IOptions<VectorStoreOptions> vectorStoreOptions,
     IOptions<AiOptions> aiOptions,
     ILogger<DocumentIngestor> logger)
 {
@@ -27,7 +29,8 @@ public sealed partial class DocumentIngestor(
     {
         var files = Directory.GetFiles(directory, "*.pdf").Order(StringComparer.Ordinal).ToList();
         var collection = vectorStore.GetCollection<Guid, DocumentChunkRecord>(
-            CollectionName, DocumentChunkRecord.CreateDefinition(_options.EmbeddingDimensions));
+            CollectionName,
+            DocumentChunkRecord.CreateDefinition(_options.EmbeddingDimensions, vectorStoreOptions.Value.DistanceFunction));
         await collection.EnsureCollectionExistsAsync(cancellationToken);
 
         var totalChunks = 0;
