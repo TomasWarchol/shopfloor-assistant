@@ -18,7 +18,7 @@ public sealed class AiOptions
 {
     public const string SectionName = "AI";
 
-    public AiModelOptions Chat { get; set; } = new() { Model = "qwen3:4b" };
+    public AiModelOptions Chat { get; set; } = new() { Model = "qwen3:4b-instruct" };
 
     public AiModelOptions Embeddings { get; set; } = new() { Model = "bge-m3" };
 

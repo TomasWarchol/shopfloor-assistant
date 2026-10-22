@@ -55,7 +55,7 @@ flowchart LR
 **Prerequisites:** [.NET 10 SDK](https://dotnet.microsoft.com/download), [Aspire CLI](https://aspire.dev) (`dotnet tool install -g Aspire.Cli`) and [Ollama](https://ollama.com).
 
 ```bash
-ollama pull qwen3:4b
+ollama pull qwen3:4b-instruct
 ollama pull bge-m3
 aspire run
 ```
@@ -68,7 +68,7 @@ The default runs fully locally. To use a stronger hosted model for chat while ke
 
 | Provider | `AI:Chat:Provider` | `AI:Chat:Model` example | Secret |
 |---|---|---|---|
-| Ollama (default) | `Ollama` | `qwen3:4b` | none |
+| Ollama (default) | `Ollama` | `qwen3:4b-instruct` | none |
 | GitHub Models | `GitHubModels` | `openai/gpt-4.1-mini` | `AI:GitHubModels:ApiKey`: a GitHub token with `models:read` |
 | Microsoft Foundry | `Foundry` | your deployment name | `AI:Foundry:Endpoint` and `AI:Foundry:ApiKey` |
 
