@@ -41,6 +41,35 @@ public class ShopFloorChatTests
     }
 
     [Fact]
+    public async Task AskAsync_FollowUp_SearchesWithTheRewriteButAnswersTheOriginalQuestion()
+    {
+        using var store = new InMemoryVectorStore();
+        var model = new FakeChatClient("Every 4000 hours [1].", response: "How often must the hydraulic oil of the HP-250 be changed?");
+        var chat = CreateChat(store, model, new AssistantOptions());
+        ChatMessage[] history = [new(ChatRole.User, "How do I change the hydraulic oil?"), new(ChatRole.Assistant, "Drain through V-7 [1].")];
+
+        var stream = await chat.AskAsync("How often?", history, TestContext.Current.CancellationToken);
+        await ReadAsync(stream);
+
+        Assert.Equal("How often must the hydraulic oil of the HP-250 be changed?", stream.SearchQuery);
+        Assert.EndsWith("Question: How often?", model.ReceivedMessages[^1].Text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AskAsync_RewritingDisabled_SearchesWithTheQuestionAndMakesNoExtraCall()
+    {
+        using var store = new InMemoryVectorStore();
+        var model = new FakeChatClient("Answer.", response: "Rewritten");
+        var chat = CreateChat(store, model, new AssistantOptions { RewriteFollowUps = false });
+
+        var stream = await chat.AskAsync("How often?", [new ChatMessage(ChatRole.User, "Earlier")], TestContext.Current.CancellationToken);
+        await ReadAsync(stream);
+
+        Assert.Equal("How often?", stream.SearchQuery);
+        Assert.Empty(model.ResponseRequests);
+    }
+
+    [Fact]
     public async Task AskAsync_NothingIndexedYet_AsksTheModelWithoutSources()
     {
         using var store = new InMemoryVectorStore();
@@ -56,6 +85,7 @@ public class ShopFloorChatTests
 
     private static ShopFloorChat CreateChat(InMemoryVectorStore store, FakeChatClient model, AssistantOptions options) => new(
         new DocumentSearch(new FakeEmbeddingGenerator(TestIndex.Dimensions), TestIndex.Chunks(store)),
+        new QuestionRewriter(model),
         model,
         Options.Create(options));
 

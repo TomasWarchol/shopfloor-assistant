@@ -42,12 +42,30 @@ public class AnswerEvaluationTests
         Assert.Empty(cited);
     }
 
-    private static async Task<(string Answer, IReadOnlyList<Source> Cited)> AskAsync(string question)
+    // "to" (it) refers to the oil change from the first question; the follow-up alone names no machine or task.
+    [Fact(Explicit = true)]
+    public async Task Answer_FollowUpQuestion_IsUnderstoodFromTheConversation()
+    {
+        const string first = "Jak wymienić olej hydrauliczny w prasie HP-250?";
+        var chat = await CreateChatAsync(TestContext.Current.CancellationToken);
+        var (firstAnswer, _) = await AskAsync(first, chat: chat);
+
+        var (answer, cited) = await AskAsync(
+            "Jak często trzeba to robić?",
+            [new ChatMessage(ChatRole.User, first), new ChatMessage(ChatRole.Assistant, firstAnswer)],
+            chat);
+
+        Assert.Contains("4000", answer, StringComparison.Ordinal);
+        Assert.Contains(cited, source => source.Chunk.DocumentId.StartsWith("HP-250", StringComparison.Ordinal));
+    }
+
+    private static async Task<(string Answer, IReadOnlyList<Source> Cited)> AskAsync(
+        string question, IReadOnlyList<ChatMessage>? history = null, ShopFloorChat? chat = null)
     {
         var cancellationToken = TestContext.Current.CancellationToken;
-        var chat = await CreateChatAsync(cancellationToken);
+        chat ??= await CreateChatAsync(cancellationToken);
 
-        var stream = await chat.AskAsync(question, [], cancellationToken);
+        var stream = await chat.AskAsync(question, history ?? [], cancellationToken);
         var answer = new StringBuilder();
         await foreach (var update in stream.Updates)
         {
@@ -55,7 +73,7 @@ public class AnswerEvaluationTests
         }
 
         var cited = Citations.FindCited(answer.ToString(), stream.Sources);
-        TestContext.Current.TestOutputHelper?.WriteLine($"Q: {question}\nA: {answer}\nSources: {string.Join(", ", stream.Sources.Select(source => $"[{source.Number}] {source.Chunk.DocumentId} p{source.Chunk.PageNumber}"))}\nCited: {string.Join(", ", cited.Select(source => source.Number))}");
+        TestContext.Current.TestOutputHelper?.WriteLine($"Q: {question}\nSearched: {stream.SearchQuery}\nA: {answer}\nSources: {string.Join(", ", stream.Sources.Select(source => $"[{source.Number}] {source.Chunk.DocumentId} p{source.Chunk.PageNumber}"))}\nCited: {string.Join(", ", cited.Select(source => source.Number))}");
         return (answer.ToString(), cited);
     }
 
@@ -66,9 +84,11 @@ public class AnswerEvaluationTests
         var store = new InMemoryVectorStore();
         await TestIndex.Ingestor(store, embeddings, configuredDimensions: 1024).IngestDirectoryAsync(SampleDocuments.DirectoryPath, cancellationToken);
 
+        var chatModel = new OllamaApiClient(ollama, "qwen3:4b-instruct");
         return new ShopFloorChat(
             new DocumentSearch(embeddings, TestIndex.Chunks(store, dimensions: 1024)),
-            new OllamaApiClient(ollama, "qwen3:4b-instruct"),
+            new QuestionRewriter(chatModel),
+            chatModel,
             Options.Create(new AssistantOptions()));
     }
 }

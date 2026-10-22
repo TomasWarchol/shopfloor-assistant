@@ -7,7 +7,7 @@
 ![Aspire](https://img.shields.io/badge/Aspire-13-512BD4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> 🚧 **Work in progress.** Milestones 1 (skeleton, provider-agnostic AI layer), 2 (PDF ingestion) and 3 (chat with citations) are done. Next: follow-up questions with conversation context and answer evaluations in CI.
+> 🚧 **Work in progress.** Milestones 1 (skeleton, provider-agnostic AI layer), 2 (PDF ingestion) and 3 (chat with citations, follow-up questions) are done. Next: answer evaluations in CI with a hosted model.
 
 ## Example
 
@@ -45,7 +45,7 @@ All documents in this repository are synthetic, made for the fictional Contoso M
 - [x] Says "not found" instead of guessing, and warns when an answer cites no document
 - [x] Documents treated as untrusted: sources in delimited elements, answers rendered without raw HTML, no path traversal through citation links
 - [x] Answer evaluation with the local model: the right fact and the right document for every test question
-- [ ] Follow-up questions rewritten with the conversation context before searching
+- [x] Follow-up questions ("How often do I have to do it?") rewritten with the conversation context before searching ([ADR 7](docs/adr/0007-follow-up-question-rewriting.md))
 - [ ] Answer-quality evaluations in CI with a hosted model
 
 ## Architecture
