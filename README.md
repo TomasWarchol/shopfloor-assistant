@@ -7,7 +7,22 @@
 ![Aspire](https://img.shields.io/badge/Aspire-13-512BD4)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> 🚧 **Work in progress.** Milestones 1 (skeleton, provider-agnostic AI layer) and 2 (PDF ingestion) are done. The chat with citations is next.
+> 🚧 **Work in progress.** Milestones 1 (skeleton, provider-agnostic AI layer), 2 (PDF ingestion) and 3 (chat with citations) are done. Next: follow-up questions with conversation context and answer evaluations in CI.
+
+## Example
+
+A question in Polish, answered from the English press manual by the local 4B model:
+
+> **Co zrobić przy alarmie E214?** *(What to do when alarm E214 appears?)*
+>
+> Przy alarmie E214 należy:
+> 1. Zatrzymać produkcję.
+> 2. Sprawdzić przepływ wody chłodzącej (minimalnie 40 L/min) i poziom oleju.
+> 3. Uruchomić ponownie tylko wtedy, gdy temperatura oleju będzie poniżej 55 °C **[1]**.
+>
+> **[1]** HP-250 Hydraulic Press – Operation and Maintenance Manual · page 4 · 9 Alarms and troubleshooting *(the link opens the PDF on page 4)*
+
+A question the documents cannot answer gets "Could not find it in the documents. Please ask the shift supervisor." and a warning that no document is cited.
 
 ## Why
 
@@ -26,9 +41,12 @@ All documents in this repository are synthetic, made for the fictional Contoso M
 - [x] Cross-lingual retrieval: ask in Polish, find the answer in English manuals and vice versa ([ADR 3](docs/adr/0003-local-multilingual-embeddings.md))
 - [x] Vector store without Docker (SQLite), or Qdrant when Docker is available ([ADR 5](docs/adr/0005-vector-store.md))
 - [x] Retrieval-quality evaluation with real embeddings: right chunk in the top 3 for every test question (hit@3 100 %, MRR 0.92)
-- [ ] Chat with streaming answers and citations
-- [ ] Guardrails against prompt injection hidden in documents
-- [ ] Answer-quality evaluations (groundedness, relevance) in CI
+- [x] Chat with streaming answers in the language of the question, citations linked to the PDF page ([ADR 6](docs/adr/0006-grounded-answers.md))
+- [x] Says "not found" instead of guessing, and warns when an answer cites no document
+- [x] Documents treated as untrusted: sources in delimited elements, answers rendered without raw HTML, no path traversal through citation links
+- [x] Answer evaluation with the local model: the right fact and the right document for every test question
+- [ ] Follow-up questions rewritten with the conversation context before searching
+- [ ] Answer-quality evaluations in CI with a hosted model
 
 ## Architecture
 
@@ -36,8 +54,8 @@ All documents in this repository are synthetic, made for the fictional Contoso M
 flowchart LR
     PDF[/PDF documents/] --> I[Ingestion worker<br/>read, chunk, embed]
     I --> V[(Vector store<br/>SQLite or Qdrant)]
-    U([Operator]) --> W[Blazor web app]
-    W -. next milestone .-> V
+    U([Operator]) --> W[Blazor chat<br/>search, then answer]
+    W -- top 5 chunks --> V
     I & W --> AI{{IChatClient / IEmbeddingGenerator}}
     AI --> O[Ollama<br/>local GPU]
     AI --> G[GitHub Models]
@@ -49,11 +67,12 @@ flowchart LR
 |---|---|
 | `src/ShopFloorAssistant.AppHost` | Aspire orchestration: runs ingestion, then the web app; hosts the dashboard |
 | `src/ShopFloorAssistant.Ingestion` | Worker that indexes the PDFs and exits |
-| `src/ShopFloorAssistant.Web` | Blazor (interactive server) user interface |
-| `src/ShopFloorAssistant.Core` | AI clients, PDF reading, chunking, indexing, vector store registration |
+| `src/ShopFloorAssistant.Web` | Blazor (interactive server) chat; serves the cited PDFs |
+| `src/ShopFloorAssistant.Core` | AI clients, PDF reading, chunking, indexing, search, grounded answers and citations |
 | `src/ShopFloorAssistant.ServiceDefaults` | Shared OpenTelemetry, health checks and resilience defaults |
 | `tools/ShopFloorAssistant.SampleDocuments` | Generates the sample PDFs from Markdown sources |
-| `tests/ShopFloorAssistant.Core.Tests` | xUnit v3 tests on Microsoft Testing Platform |
+| `tests/ShopFloorAssistant.Core.Tests` | xUnit v3 tests on Microsoft Testing Platform, including the evaluations |
+| `tests/ShopFloorAssistant.Web.Tests` | Tests for safe rendering of answers |
 
 ### How a PDF becomes searchable
 
@@ -72,7 +91,7 @@ ollama pull bge-m3
 aspire run
 ```
 
-Aspire runs the ingestion worker first (about a minute on a laptop GPU), then starts the web app. Open the dashboard link printed in the console to see both, including traces of every embedding call.
+Aspire runs the ingestion worker first (about a minute on a laptop GPU), then starts the web app. Open the dashboard link printed in the console, then the `web` endpoint to chat. The dashboard also shows a trace of every embedding and chat call, with token counts.
 
 ### Choosing the vector store
 
@@ -107,10 +126,11 @@ dotnet run --project tools/ShopFloorAssistant.SampleDocuments
 
 ```bash
 dotnet test                   # unit and integration tests, no network or containers
-dotnet test --explicit only   # tests with real models: chat smoke test and retrieval evaluation (needs Ollama)
+dotnet test --explicit only   # tests with real models: smoke test, retrieval and answer evaluations (needs Ollama)
 ```
 
-The retrieval evaluation asks 8 Polish and English questions and checks that the chunk with the answer is retrieved. It fails if hit@3 drops below 85 % or MRR below 0.80.
+- **Retrieval evaluation**: 8 Polish and English questions. It checks that the chunk with the answer is retrieved and fails if hit@3 drops below 85 % or MRR below 0.80.
+- **Answer evaluation**: the full pipeline with the chat model. Each answer must contain the fact from the document and cite the right document, and a question outside the documents must cite nothing.
 
 ## Design decisions
 

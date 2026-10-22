@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Markdig" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\ShopFloorAssistant.Core\ShopFloorAssistant.Core.csproj" />
     <ProjectReference Include="..\ShopFloorAssistant.ServiceDefaults\ShopFloorAssistant.ServiceDefaults.csproj" />
   </ItemGroup>

@@ -2,7 +2,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.VectorData;
-using ShopFloorAssistant.Core.AI;
 using ShopFloorAssistant.Core.Storage;
 
 namespace ShopFloorAssistant.Core.Ingestion;
@@ -10,27 +9,17 @@ namespace ShopFloorAssistant.Core.Ingestion;
 /// <summary>Reads PDFs, splits them into chunks, embeds the chunks and stores them in the vector store.</summary>
 public sealed partial class DocumentIngestor(
     IEmbeddingGenerator<string, Embedding<float>> embeddingGenerator,
-    VectorStore vectorStore,
+    ChunkIndex chunkIndex,
     IOptions<IngestionOptions> options,
-    IOptions<VectorStoreOptions> vectorStoreOptions,
-    IOptions<AiOptions> aiOptions,
     ILogger<DocumentIngestor> logger)
 {
     private readonly IngestionOptions _options = options.Value;
     private readonly DocumentChunker _chunker = new(options.Value.MaxChunkLength);
 
-    /// <summary>
-    /// One collection per embedding model: vectors from different models are not comparable,
-    /// so switching the model starts a fresh index instead of mixing them.
-    /// </summary>
-    public string CollectionName { get; } = CollectionNames.ForEmbeddingModel(aiOptions.Value.Embeddings.Model);
-
     public async Task<IngestionSummary> IngestDirectoryAsync(string directory, CancellationToken cancellationToken = default)
     {
         var files = Directory.GetFiles(directory, "*.pdf").Order(StringComparer.Ordinal).ToList();
-        var collection = vectorStore.GetCollection<Guid, DocumentChunkRecord>(
-            CollectionName,
-            DocumentChunkRecord.CreateDefinition(_options.EmbeddingDimensions, vectorStoreOptions.Value.DistanceFunction));
+        var collection = chunkIndex.Get();
         await collection.EnsureCollectionExistsAsync(cancellationToken);
 
         var totalChunks = 0;
@@ -44,7 +33,7 @@ public sealed partial class DocumentIngestor(
             totalChunks += chunks.Count;
         }
 
-        return new IngestionSummary(CollectionName, files.Count, totalChunks);
+        return new IngestionSummary(chunkIndex.Name, files.Count, totalChunks);
     }
 
     // Deleting the document's old chunks first keeps the index correct when a new revision has fewer chunks.

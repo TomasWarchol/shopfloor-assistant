@@ -1,27 +1,20 @@
 using CommunityToolkit.VectorData.InMemory;
 using CommunityToolkit.VectorData.SqliteVec;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Microsoft.Extensions.VectorData;
-using ShopFloorAssistant.Core.AI;
 using ShopFloorAssistant.Core.Ingestion;
-using ShopFloorAssistant.Core.Storage;
+using ShopFloorAssistant.Core.Tests.TestDoubles;
 
 namespace ShopFloorAssistant.Core.Tests.Ingestion;
 
 public class DocumentIngestorTests
 {
-    private const int Dimensions = 8;
-
     [Fact]
     public async Task IngestDirectoryAsync_StoresEveryChunkWithDocumentAndPage()
     {
         using var store = new InMemoryVectorStore();
-        var ingestor = CreateIngestor(store);
 
-        var summary = await ingestor.IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
-        var records = await ReadAllAsync(store, summary.CollectionName);
+        var summary = await TestIndex.Ingestor(store).IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
+        var records = await ReadAllAsync(store);
 
         Assert.Equal("chunks-bge-m3", summary.CollectionName);
         Assert.Equal(4, summary.DocumentCount);
@@ -36,19 +29,19 @@ public class DocumentIngestorTests
     public async Task IngestDirectoryAsync_RunTwice_ReplacesInsteadOfDuplicating()
     {
         using var store = new InMemoryVectorStore();
-        var ingestor = CreateIngestor(store);
+        var ingestor = TestIndex.Ingestor(store);
 
         var first = await ingestor.IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
         await ingestor.IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
 
-        Assert.Equal(first.ChunkCount, (await ReadAllAsync(store, first.CollectionName)).Count);
+        Assert.Equal(first.ChunkCount, (await ReadAllAsync(store)).Count);
     }
 
     [Fact]
     public async Task IngestDirectoryAsync_EmbeddingSizeMismatch_FailsWithHint()
     {
         using var store = new InMemoryVectorStore();
-        var ingestor = CreateIngestor(store, configuredDimensions: 1024);
+        var ingestor = TestIndex.Ingestor(store, configuredDimensions: 1024);
 
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => ingestor.IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken));
@@ -66,17 +59,15 @@ public class DocumentIngestorTests
             IngestionSummary summary;
             using (var store = new SqliteVectorStore($"Data Source={databasePath};Pooling=False"))
             {
-                summary = await CreateIngestor(store).IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
+                summary = await TestIndex.Ingestor(store).IngestDirectoryAsync(SampleDocuments.DirectoryPath, TestContext.Current.CancellationToken);
             }
 
             using var reopened = new SqliteVectorStore($"Data Source={databasePath};Pooling=False");
-            var collection = reopened.GetCollection<Guid, DocumentChunkRecord>(
-                summary.CollectionName, DocumentChunkRecord.CreateDefinition(Dimensions, DistanceFunction.CosineDistance));
-            var hits = await collection
-                .SearchAsync(FakeEmbeddingGenerator.Vector("query", Dimensions), top: 3, cancellationToken: TestContext.Current.CancellationToken)
+            var hits = await TestIndex.Chunks(reopened).Get()
+                .SearchAsync(FakeEmbeddingGenerator.Vector("query", TestIndex.Dimensions), top: 3, cancellationToken: TestContext.Current.CancellationToken)
                 .ToListAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(summary.ChunkCount, (await ReadAllAsync(reopened, summary.CollectionName)).Count);
+            Assert.Equal(summary.ChunkCount, (await ReadAllAsync(reopened)).Count);
             Assert.Equal(3, hits.Count);
             Assert.All(hits, hit => Assert.True(hit.Record.PageNumber > 0));
         }
@@ -86,37 +77,8 @@ public class DocumentIngestorTests
         }
     }
 
-    private static DocumentIngestor CreateIngestor(VectorStore store, int configuredDimensions = Dimensions) => new(
-        new FakeEmbeddingGenerator(Dimensions),
-        store,
-        Options.Create(new IngestionOptions { EmbeddingDimensions = configuredDimensions }),
-        Options.Create(new VectorStoreOptions()),
-        Options.Create(new AiOptions()),
-        NullLogger<DocumentIngestor>.Instance);
-
-    private static async Task<List<DocumentChunkRecord>> ReadAllAsync(VectorStore store, string collectionName) =>
-        await store.GetCollection<Guid, DocumentChunkRecord>(
-                collectionName, DocumentChunkRecord.CreateDefinition(Dimensions, DistanceFunction.CosineDistance))
+    private static async Task<List<DocumentChunkRecord>> ReadAllAsync(VectorStore store) =>
+        await TestIndex.Chunks(store).Get()
             .GetAsync(record => record.PageNumber > 0, top: 10_000, cancellationToken: TestContext.Current.CancellationToken)
             .ToListAsync(TestContext.Current.CancellationToken);
-
-    /// <summary>Deterministic vectors, so the pipeline can be tested without a model.</summary>
-    private sealed class FakeEmbeddingGenerator(int dimensions) : IEmbeddingGenerator<string, Embedding<float>>
-    {
-        public static float[] Vector(string value, int dimensions) =>
-            [.. Enumerable.Range(1, dimensions).Select(i => (float)((value.Length % 13) + i))];
-
-        public Task<GeneratedEmbeddings<Embedding<float>>> GenerateAsync(
-            IEnumerable<string> values, EmbeddingGenerationOptions? options = null, CancellationToken cancellationToken = default)
-        {
-            var embeddings = values.Select(value => new Embedding<float>(Vector(value, dimensions)));
-            return Task.FromResult(new GeneratedEmbeddings<Embedding<float>>(embeddings));
-        }
-
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
-
-        public void Dispose()
-        {
-        }
-    }
 }

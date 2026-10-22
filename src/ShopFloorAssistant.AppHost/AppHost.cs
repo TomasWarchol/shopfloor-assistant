@@ -2,11 +2,15 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var repositoryRoot = Path.GetFullPath(Path.Combine(builder.AppHostDirectory, "..", ".."));
 
-var ingestion = builder.AddProject<Projects.ShopFloorAssistant_Ingestion>("ingestion")
-    .WithEnvironment("Ingestion__DocumentsPath", Path.Combine(repositoryRoot, "samples", "documents"));
+var documentsPath = Path.Combine(repositoryRoot, "samples", "documents");
 
+var ingestion = builder.AddProject<Projects.ShopFloorAssistant_Ingestion>("ingestion")
+    .WithEnvironment("Ingestion__DocumentsPath", documentsPath);
+
+// The web app serves the same PDFs, so citation links can open the cited page.
 var web = builder.AddProject<Projects.ShopFloorAssistant_Web>("web")
     .WithExternalHttpEndpoints()
+    .WithEnvironment("Ingestion__DocumentsPath", documentsPath)
     .WaitForCompletion(ingestion);
 
 // SQLite needs nothing installed. Qdrant runs in Docker: aspire run -- VectorStore:Provider=Qdrant
