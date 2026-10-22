@@ -1,0 +1,13 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.6.3">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AspireUseCliBundle>true</AspireUseCliBundle>
+    <UserSecretsId>08fe91ac-0213-4d08-bd06-6cc1c03246d4</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShopFloorAssistant.Web\ShopFloorAssistant.Web.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>e1a54813-927c-4a27-aa2e-a2c7b94f45c9</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ShopFloorAssistant.Core\ShopFloorAssistant.Core.csproj" />
+    <ProjectReference Include="..\ShopFloorAssistant.ServiceDefaults\ShopFloorAssistant.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+</Project>

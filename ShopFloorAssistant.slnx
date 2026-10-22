@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ShopFloorAssistant.AppHost/ShopFloorAssistant.AppHost.csproj" />
+    <Project Path="src/ShopFloorAssistant.Core/ShopFloorAssistant.Core.csproj" />
+    <Project Path="src/ShopFloorAssistant.ServiceDefaults/ShopFloorAssistant.ServiceDefaults.csproj" />
+    <Project Path="src/ShopFloorAssistant.Web/ShopFloorAssistant.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShopFloorAssistant.Core.Tests/ShopFloorAssistant.Core.Tests.csproj" />
+  </Folder>
+</Solution>
