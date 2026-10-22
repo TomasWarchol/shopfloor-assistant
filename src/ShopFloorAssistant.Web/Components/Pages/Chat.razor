@@ -1,0 +1,191 @@
+@page "/"
+@rendermode InteractiveServer
+@implements IDisposable
+@using Microsoft.Extensions.AI
+@using Microsoft.Extensions.Options
+@using ShopFloorAssistant.Core.AI
+@using ShopFloorAssistant.Core.Chat
+@using ShopFloorAssistant.Web.Chat
+@inject ShopFloorChat Assistant
+@inject IOptions<AiOptions> AiOptions
+@inject ILogger<Chat> Logger
+
+<PageTitle>ShopFloor Assistant</PageTitle>
+
+<div class="app">
+    <header class="topbar">
+        <div class="brand">
+            <span class="logo" aria-hidden="true">SF</span>
+            <div>
+                <h1>ShopFloor Assistant</h1>
+                <p>Contoso Metal Stamping · synthetic demo documents</p>
+            </div>
+        </div>
+        <span class="model" title="Chat model">@AiOptions.Value.Chat.Model</span>
+    </header>
+
+    @* column-reverse keeps the newest message in view without any JavaScript *@
+    <main class="conversation" aria-live="polite">
+        <div class="turns">
+            @if (_turns.Count == 0)
+            {
+                <div class="welcome">
+                    <h2>Ask your work instructions</h2>
+                    <p>Answers come only from the plant documents, with the page to check. Ask in English or Polish.</p>
+                    <div class="suggestions">
+                        @foreach (var suggestion in Suggestions)
+                        {
+                            <button type="button" @onclick="() => AskAsync(suggestion)">@suggestion</button>
+                        }
+                    </div>
+                </div>
+            }
+
+            @foreach (var turn in _turns)
+            {
+                <div class="question">@turn.Question</div>
+                <article class="answer">
+                    @if (turn.Error is not null)
+                    {
+                        <p class="notice error">@turn.Error</p>
+                    }
+                    else if (turn.State == TurnState.Searching)
+                    {
+                        <p class="status">Searching the documents…</p>
+                    }
+                    else
+                    {
+                        <div class="text">@((MarkupString)AnswerFormatter.ToHtml(turn.Answer))</div>
+
+                        @if (turn.State == TurnState.Done)
+                        {
+                            @if (turn.Cited.Count > 0)
+                            {
+                                <ol class="sources" aria-label="Sources">
+                                    @foreach (var source in turn.Cited)
+                                    {
+                                        <li>
+                                            <a href="@DocumentLink(source)" target="_blank" rel="noopener">
+                                                <span class="badge">@source.Number</span>
+                                                <span class="title">@source.Chunk.DocumentTitle</span>
+                                                <span class="meta">page @source.Chunk.PageNumber@(source.Chunk.Section.Length > 0 ? $" · {source.Chunk.Section}" : "")</span>
+                                            </a>
+                                        </li>
+                                    }
+                                </ol>
+                            }
+                            else if (turn.Sources.Count == 0)
+                            {
+                                <p class="notice">No documents are indexed yet. Run the ingestion first.</p>
+                            }
+                            else
+                            {
+                                <p class="notice warning">This answer cites no document. Check the documents or ask your shift supervisor before acting on it.</p>
+                            }
+                        }
+                    }
+                </article>
+            }
+        </div>
+    </main>
+
+    <form class="composer" @onsubmit="SubmitAsync" @onsubmit:preventDefault>
+        <input @bind="_draft" @bind:event="oninput" maxlength="500" disabled="@_busy"
+               placeholder="Ask about a machine, a procedure or a quality check…" aria-label="Question" />
+        <button type="submit" disabled="@(_busy || string.IsNullOrWhiteSpace(_draft))">Ask</button>
+    </form>
+</div>
+
+@code {
+    private static readonly string[] Suggestions =
+    [
+        "What torque do I use for the manual clamping bolts?",
+        "Co zrobić przy alarmie E214?",
+        "Who may remove a lockout padlock?",
+        "Jak często mierzyć wymiary krytyczne wspornika 4471-B?",
+    ];
+
+    private readonly List<Turn> _turns = [];
+    private readonly List<ChatMessage> _history = [];
+    private readonly CancellationTokenSource _cancellation = new();
+    private string _draft = string.Empty;
+    private bool _busy;
+
+    private Task SubmitAsync() => AskAsync(_draft);
+
+    private async Task AskAsync(string question)
+    {
+        question = question.Trim();
+        if (_busy || question.Length == 0)
+        {
+            return;
+        }
+
+        var turn = new Turn(question);
+        _turns.Add(turn);
+        _draft = string.Empty;
+        _busy = true;
+
+        try
+        {
+            var answer = await Assistant.AskAsync(question, _history, _cancellation.Token);
+            turn.Sources = answer.Sources;
+            turn.State = TurnState.Answering;
+
+            await foreach (var update in answer.Updates.WithCancellation(_cancellation.Token))
+            {
+                turn.Answer += update.Text;
+                StateHasChanged();
+            }
+
+            turn.Cited = Citations.FindCited(turn.Answer, turn.Sources);
+            _history.Add(new ChatMessage(ChatRole.User, question));
+            _history.Add(new ChatMessage(ChatRole.Assistant, turn.Answer));
+        }
+        catch (OperationCanceledException) when (_cancellation.IsCancellationRequested)
+        {
+            // The user left the page.
+        }
+        catch (HttpRequestException exception)
+        {
+            ChatLog.AnswerFailed(Logger, exception, question.Length);
+            turn.Error = "The AI model is not reachable. Check that Ollama is running, then ask again.";
+        }
+        finally
+        {
+            turn.State = TurnState.Done;
+            _busy = false;
+        }
+    }
+
+    private static string DocumentLink(Source source) =>
+        $"documents/{Uri.EscapeDataString(source.Chunk.DocumentId)}.pdf#page={source.Chunk.PageNumber}";
+
+    public void Dispose()
+    {
+        _cancellation.Cancel();
+        _cancellation.Dispose();
+    }
+
+    private enum TurnState
+    {
+        Searching,
+        Answering,
+        Done,
+    }
+
+    private sealed class Turn(string question)
+    {
+        public string Question { get; } = question;
+
+        public TurnState State { get; set; }
+
+        public string Answer { get; set; } = string.Empty;
+
+        public IReadOnlyList<Source> Sources { get; set; } = [];
+
+        public IReadOnlyList<Source> Cited { get; set; } = [];
+
+        public string? Error { get; set; }
+    }
+}

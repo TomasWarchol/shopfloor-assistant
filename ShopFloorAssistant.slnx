@@ -8,6 +8,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ShopFloorAssistant.Core.Tests/ShopFloorAssistant.Core.Tests.csproj" />
+    <Project Path="tests/ShopFloorAssistant.Web.Tests/ShopFloorAssistant.Web.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/ShopFloorAssistant.SampleDocuments/ShopFloorAssistant.SampleDocuments.csproj" />
