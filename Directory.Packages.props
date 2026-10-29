@@ -11,8 +11,8 @@
   </ItemGroup>
 
   <ItemGroup Label="Vector store">
-    <PackageVersion Include="Aspire.Hosting.Qdrant" Version="13.6.3" />
-    <PackageVersion Include="Aspire.Qdrant.Client" Version="13.6.3" />
+    <PackageVersion Include="Aspire.Hosting.Qdrant" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Qdrant.Client" Version="13.6.4" />
     <PackageVersion Include="CommunityToolkit.VectorData.InMemory" Version="1.0.1" />
     <PackageVersion Include="CommunityToolkit.VectorData.Qdrant" Version="1.0.1" />
     <PackageVersion Include="CommunityToolkit.VectorData.SqliteVec" Version="1.0.3-preview" />
